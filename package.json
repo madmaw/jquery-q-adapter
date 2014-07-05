@@ -1,0 +1,18 @@
+﻿{
+  "name": "jquery-q-adapter",
+  "version": "0.1.2",
+  "dependencies": {
+    "q": "~1.0.1"
+  },
+  "main": "lib/jquery-q-adapter.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/madmaw/jquery-q-adapter.git"
+  },
+  "devDependencies": {
+    "grunt": "~0.4.2",
+	  "grunt-ts": "~1.11.2",
+    "grunt-contrib-clean": "~0.5.0",
+    "grunt-auto-install": "~0.1.1"
+  }
+}
