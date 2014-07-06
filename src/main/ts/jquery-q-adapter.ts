@@ -1,3 +1,5 @@
+import Q = require("q");
+
 /**
  * Interface for the JQuery promise/deferred callbacks
  */
@@ -224,7 +226,7 @@ export interface JQueryStatic {
      */
      Deferred: new <T>(beforeStart?: (deferred: JQueryDeferred<T>) => any) => JQueryDeferred<T>;
 
-     when: (...promises: JQueryPromise<any>[]) =>JQueryPromise<any>;
+     when: (...promises: JQueryPromise<any>[]) => JQueryPromise<any>;
 }
 
 class JQueryPromiseAdapter<T> implements JQueryPromise<T> {
@@ -252,8 +254,8 @@ class JQueryPromiseAdapter<T> implements JQueryPromise<T> {
     			result = result.finally(JQueryPromiseAdapter._wrap(callback));
     		}
     	}
-    	// assume we're a deferred, OR that they'll only use the subset of methods that we expose
-    	return new JQueryDeferredAdapter(result);
+    	// hope they don't actually use this as a deferred, because it will break!
+    	return <any>(new JQueryPromiseAdapter(result));
     }
 
     done(...doneCallbacks: JQueryPromiseCallback<T>[]): JQueryDeferred<T> {
@@ -263,7 +265,8 @@ class JQueryPromiseAdapter<T> implements JQueryPromise<T> {
     			this._promise.done(JQueryPromiseAdapter._wrap(callback));
     		}
     	}
-    	return <JQueryDeferred<T>><any>this;
+        // upcast
+    	return <any>this;
     }
 
     fail(...failCallbacks: JQueryPromiseCallback<any>[]): JQueryDeferred<T> {
@@ -274,7 +277,8 @@ class JQueryPromiseAdapter<T> implements JQueryPromise<T> {
     			result = result.catch(JQueryPromiseAdapter._wrap(callback));
     		}
     	}
-    	return new JQueryDeferredAdapter(result);
+        // upcast, do not use as a deferred!!
+    	return <any>(new JQueryPromiseAdapter(result));
     }
 
     progress(...progressCallbacks: JQueryPromiseCallback<T>[]): JQueryDeferred<T> {
@@ -285,7 +289,8 @@ class JQueryPromiseAdapter<T> implements JQueryPromise<T> {
     			result = result.progress(JQueryPromiseAdapter._wrap(callback));
     		}
     	}
-    	return new JQueryDeferredAdapter(result);
+        // upcast 
+    	return <any>(new JQueryPromiseAdapter(result));
     }
 
 
@@ -301,7 +306,11 @@ class JQueryPromiseAdapter<T> implements JQueryPromise<T> {
     then<U>(doneFilter: (value: T) => JQueryGenericPromise<U>, failFilter?: (...reasons: any[]) => U, progressFilter?: (...progression: any[]) => any): JQueryPromise<U>;
     then<U>(doneFilter: (value: T) => U, failFilter?: (...reasons: any[]) => JQueryGenericPromise<U>, progressFilter?: (...progression: any[]) => any): JQueryPromise<U>;
     then<U>(doneFilter: (value: T) => JQueryGenericPromise<U>, failFilter?: (...reasons: any[]) => JQueryGenericPromise<U>, progressFilter?: (...progression: any[]) => any): JQueryPromise<U> {
-    	var result = this._promise.then(doneFilter, failFilter, progressFilter);
+    	var result = this._promise.then(
+            JQueryPromiseAdapter._wrap(doneFilter), 
+            JQueryPromiseAdapter._wrap(failFilter), 
+            JQueryPromiseAdapter._wrap(progressFilter)
+        );
     	return new JQueryPromiseAdapter(result);
     }
 
@@ -309,19 +318,16 @@ class JQueryPromiseAdapter<T> implements JQueryPromise<T> {
 }
 
 class JQueryDeferredAdapter<T> extends JQueryPromiseAdapter<T> implements JQueryDeferred<T> {
-	private _deferred: Q.Deferred<T>;
-
-	constructor(promise: Q.Promise<T>);
-	constructor(beforeStart?: (deferred: JQueryDeferred<T>) => any) 
-	constructor(p: any) {
+    constructor(beforeStart?: (deferred: JQueryDeferred<T>) => any);
+	constructor(beforeStart?: (deferred: JQueryDeferred<T>) => any, private _deferred?: Q.Deferred<T>) {
 		super();
-		if( p instanceof Function ) {
-			var beforeStart = p;
+		if( beforeStart ) {
 			beforeStart(this);			
-		} else {
-			this._deferred = p;
-			this._promise = this._deferred.promise;
 		}
+        if( this._deferred == null ) {
+            this._deferred = Q.defer<T>();
+        }
+        this._promise = this._deferred.promise;
 	}
 
     notify(...args: any[]): JQueryDeferred<T> {
@@ -352,12 +358,12 @@ class JQueryDeferredAdapter<T> extends JQueryPromiseAdapter<T> implements JQuery
 export var jQuery: JQueryStatic = {
 	Deferred: JQueryDeferredAdapter,
 	when: function(...promises: JQueryPromise<any>[]): JQueryPromise<any> {
-		var qPromises = [];
+		var qPromises: Q.IPromise<any>[] = [];
 		for( var i in promises ) {
 			var promise = <JQueryPromiseAdapter<any>>promises[i];
 			qPromises.push(promise._promise);
 		}
-		var result = Q.all.apply(Q, qPromises);
+		var result = Q.all(qPromises);
 		return new JQueryPromiseAdapter(result);
 	}
 };
